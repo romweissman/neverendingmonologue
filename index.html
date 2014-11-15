@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+{% autoescape true %}
+<html>
+  <!-- [START head_html] -->
+  <head>
+    <link type="text/css" rel="stylesheet" href="/stylesheets/main.css" />
+     <script type="text/javascript">
+
+        // listener function changes src
+        var space_count = 0;
+        var current_space = -1;
+        var laugh_starts = [];
+        var laugh_ends = [];
+        var total_laughs = [{{total_laughs}}];
+        var total_listens = {{total_listens}};
+        var smiley_size = 100;
+        var space_down = 0;
+
+        function next() {
+
+          var my_audio = document.getElementById('excerpt');
+          var laugh_array = new Array(Math.ceil(my_audio.duration)*4);
+          if (laugh_ends.length < laugh_starts.length) {
+            laugh_ends.push(my_audio.duration);
+          }
+          for (i = 0; i < laugh_array.length; i++) {
+            laugh_array[i] = 0;
+            for (j = 0; j < laugh_starts.length; j++) {
+              if (i/4 > laugh_starts[j] && i/4 < laugh_ends[j]) {
+                laugh_array[i] = 1;
+              }
+            }
+          }
+
+          var fake_form = document.createElement("form");
+          fake_form.setAttribute("method", "post");
+          fake_form.setAttribute("action", "/yo");
+
+          var laugh_array_field = document.createElement("input");
+          laugh_array_field.setAttribute("type", "hidden");
+          laugh_array_field.setAttribute("name", "laugh_array");
+          laugh_array_field.setAttribute("value", laugh_array);
+          fake_form.appendChild(laugh_array_field);
+
+          var audio_url = document.createElement("input");
+          audio_url.setAttribute("type", "hidden");
+          audio_url.setAttribute("name", "audio_url");
+          audio_url.setAttribute("value", "{{audio_url}}");
+          fake_form.appendChild(audio_url);
+
+          fake_form.submit();
+        }
+
+        function showSmiley() {
+          if (current_space != space_count) {
+            current_space = space_count;
+            var my_audio = document.getElementById('excerpt');
+            document.getElementById("smiley").style.display='block';
+            var starttime = my_audio.currentTime;
+            document.getElementById('starttime').innerHTML = "start: " + starttime.toString();
+            laugh_starts.push(starttime);
+          }
+        }
+
+        function hideSmiley() {
+          var my_audio = document.getElementById('excerpt');
+          document.getElementById("smiley").style.display='none';
+          var endtime = my_audio.currentTime;
+          document.getElementById('endtime').innerHTML = "end: " + endtime.toString();
+          space_count = space_count + 1;
+          laugh_ends.push(endtime);
+          var allclicks = document.getElementById('allclicks').innerHTML = laugh_starts.toString() + "|" + laugh_ends.toString();
+        }
+
+        function pauseExcerpt() {
+            var my_audio = document.getElementById('excerpt');
+            var laugh_track = document.getElementById('laugh_track');
+            if (my_audio.paused) {
+              my_audio.play();
+            } else {
+              my_audio.pause();
+              laugh_track.volume = 0;
+            }
+        }
+
+        function keyDown(e) {
+          if (e.keyCode == 32) {
+            space_down = 1;
+            showSmiley();
+          }
+        }
+
+        function keyUp(e) {
+          if (e.keyCode == 32) {
+            space_down = 0;
+            hideSmiley();
+          }
+          if (e.keyCode == 80) {
+            pauseExcerpt();
+          }
+          if (e.keyCode == 83) {
+            next();
+          }
+        }
+
+        // add a listener function to the ended event
+        function addListeners(){
+            var my_audio = document.getElementById('excerpt');
+            var laugh_buffer = 0.1;
+
+            my_audio.addEventListener('ended', next, false);
+
+            var laugh_track = document.getElementById('laugh_track');
+            laugh_track.currentTime = laugh_track.duration * Math.random();
+            laugh_track.loop = true;
+            var volume_num = 0;
+            laugh_track.volume = 0;
+
+            window.addEventListener("keydown", keyDown, false);
+            window.addEventListener("keyup", keyUp, false);
+
+            var excerpt_ctx = new AudioContext();
+            var audio_src = excerpt_ctx.createMediaElementSource(my_audio);
+            var analyser = excerpt_ctx.createAnalyser();
+            audio_src.connect(analyser);
+            var frequency_data = new Uint8Array(analyser.frequencyBinCount);
+            analyser.connect(excerpt_ctx.destination);
+
+            for (i = 0; i < frequency_data.length; i+=50) {
+              var fbar = document.createElement('div');
+              fbar.id = "fbar" + i.toString();
+              fbar.className = "fbar";
+              document.body.appendChild(fbar);
+            }
+
+            function renderFrame() {
+              requestAnimationFrame(renderFrame);
+              analyser.getByteFrequencyData(frequency_data);
+              for (i = 0; i < frequency_data.length; i+=50) {
+                document.getElementById("fbar" + i.toString()).style.width = frequency_data[i].toString() + "px";
+                document.getElementById("fbar" + i.toString()).style.height = frequency_data[i].toString() + "px";
+              }
+              if (total_laughs.length > Math.floor(my_audio.currentTime*4) && total_laughs[Math.floor(my_audio.currentTime*4)] != volume_num) {
+                volume_num = total_laughs[Math.floor(my_audio.currentTime*4)];
+                laugh_track.volume = volume_num / total_listens;
+              }
+              if (laugh_track.currentTime > laugh_track.duration - laugh_buffer) {
+                laugh_track.currentTime = 0;
+              }
+              if (space_down == 1) {
+                smiley_size += 1;
+                document.getElementById("smiley").style.fontSize=smiley_size.toString()+'%';
+              } else {
+                smiley_size = 100;
+              }
+            }
+
+            renderFrame();
+        }
+    </script>
+  </head>
+  <!-- [END head_html] -->
+  <body onload="addListeners()">
+    <audio id="excerpt" autoplay>
+      <source src="{{audio_url}}" type="audio/mpeg">
+      Your browser does not support the audio tag.
+    </audio>
+
+    <audio id="laugh_track" autoplay loop>
+      <source src="audio/laughTrack.mp3" type="audio/mpeg">
+      Your browser does not support the audio tag.
+    </audio>
+
+    <p class="emoticon" id="smiley" hidden="hidden">
+      :)
+    </p>
+
+    <div class="debug" hidden="hidden">
+      <hr>
+      <p id="starttime">
+        start: 0
+      </p>
+      <p id="endtime">
+        end: 0
+      </p>
+      <p id="allclicks">
+        Hold
+      </p>
+      <p>
+        Total Laughs: <br>
+        {{total_laughs}} <br>
+        Total Listens: {{total_listens}}
+      </p>
+    </div>
+
+  </body>
+</html>
+{% endautoescape %}
